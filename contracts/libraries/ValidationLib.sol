@@ -12,6 +12,12 @@ library ValidationLib {
         }
     }
 
+    function validateBlacklistUser() internal view {
+        if (StorageLib.getBlacklistUser(msg.sender)) {
+            revert Errors.BlacklistedAccount();
+        }
+    }
+
     // ============== FIXED PRICE ==============
 
     function validateListErc721Request(

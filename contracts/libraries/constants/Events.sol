@@ -25,6 +25,8 @@ library Events {
         uint256 timestamp
     );
 
+    event BlacklistedAccount(address account, uint256 timestamp);
+
     // ============== FIXED PRICE ==============
     event ListNftForSale(
         Types.ListERC721Params listNftParams,

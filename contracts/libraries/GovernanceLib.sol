@@ -58,4 +58,12 @@ library GovernanceLib {
             block.timestamp
         );
     }
+
+    function setBlacklistUser(address account) internal {
+        if (account == address(0)) {
+            revert Errors.InvalidParameter();
+        }
+        StorageLib.setBlacklistUser(account);
+        emit Events.BlacklistedAccount(account, block.timestamp);
+    }
 }

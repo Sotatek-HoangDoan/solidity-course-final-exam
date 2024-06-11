@@ -76,7 +76,7 @@ library AuctionNftLib {
         );
     }
 
-    function cancelAuction(address _creator, uint256 _auctionId) internal {
+    function processCancelAuction(address _creator, uint256 _auctionId) internal {
         Types.AuctionNFT storage request = StorageLib.getAuctionNFT(_auctionId);
         ValidationLib.validateCancelAuctionNft(
             _creator,

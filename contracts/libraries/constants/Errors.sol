@@ -9,4 +9,5 @@ library Errors {
     error InvalidParameter();
     error NotProtocolOwner();
     error InsufficientBalance();
+    error BlacklistedAccount();
 }

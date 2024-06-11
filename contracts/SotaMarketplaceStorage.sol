@@ -15,4 +15,6 @@ abstract contract SotaMarketplaceStorage {
 
     // aution index => bidder => bid place
     mapping(uint256 => mapping(address => Types.BidPlace)) public bidPlaces; // SLOT 6
+
+    mapping(address => bool) public blacklist; // SLOT 7
 }

@@ -6,6 +6,7 @@ import {Types} from "contracts/libraries/constants/Types.sol";
 import {Errors} from "contracts/libraries/constants/Errors.sol";
 import {StorageLib} from "contracts/libraries/StorageLib.sol";
 import {ValidationLib} from "contracts/libraries/ValidationLib.sol";
+import {GovernanceLib} from "contracts/libraries/GovernanceLib.sol";
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -74,17 +75,28 @@ library FixedPriceNftLib {
     function processBuyNft(address _buyer, uint256 _listNftId) internal {
         Types.ListNFT storage request = StorageLib.getListNFT(_listNftId);
         ValidationLib.validateBuyListNft(_buyer, request.seller, request.sold);
-
+        (uint256 buyFee, uint256 sellFee, address treasury) = GovernanceLib
+            .getFeeInfo(request.amount);
         request.sold = true;
 
         if (request.payToken == address(0)) {
-            _forwardETHToSeller(request.seller, request.price);
+            if (msg.value != request.amount + buyFee) {
+                revert Errors.InsufficientBalance();
+            }
+            _forwardETHFromBuyer(request.seller, request.price - sellFee);
+            _forwardETHFromBuyer(treasury, sellFee + buyFee);
         } else {
-            _forwardERC20ToSeller(
+            _forwardERC20FromBuyer(
                 _buyer,
                 request.seller,
                 request.payToken,
-                request.price
+                request.price - sellFee
+            );
+            _forwardERC20FromBuyer(
+                _buyer,
+                treasury,
+                request.payToken,
+                sellFee + buyFee
             );
         }
 
@@ -145,14 +157,11 @@ library FixedPriceNftLib {
         StorageLib.setTotalListNfts(currentListNftId + 1);
     }
 
-    function _forwardETHToSeller(address _seller, uint256 _amount) private {
-        if (msg.value != _amount) {
-            revert Errors.InsufficientBalance();
-        }
+    function _forwardETHFromBuyer(address _seller, uint256 _amount) private {
         payable(_seller).transfer(_amount);
     }
 
-    function _forwardERC20ToSeller(
+    function _forwardERC20FromBuyer(
         address _buyer,
         address _seller,
         address _token,

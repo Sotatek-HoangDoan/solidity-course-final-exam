@@ -66,4 +66,18 @@ library GovernanceLib {
         StorageLib.setBlacklistUser(account);
         emit Events.BlacklistedAccount(account, block.timestamp);
     }
+
+    function getFeeInfo(
+        uint256 amount
+    )
+        internal
+        view
+        returns (uint256 buyFee, uint256 sellFee, address treasury)
+    {
+        Types.TreasuryData storage treasuryData = StorageLib.getTreasuryData();
+
+        buyFee = (amount * treasuryData.treasuryBuyFeeBPS) / BPS_MAX;
+        sellFee = (amount * treasuryData.treasurySellFeeBPS) / BPS_MAX;
+        treasury = treasuryData.treasury;
+    }
 }

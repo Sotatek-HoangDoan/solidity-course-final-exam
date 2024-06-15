@@ -6,9 +6,9 @@ import {Errors} from "contracts/libraries/constants/Errors.sol";
 import {StorageLib} from "contracts/libraries/StorageLib.sol";
 
 library ValidationLib {
-    function validateCallerIsProtocolOwner() internal view {
-        if (msg.sender != StorageLib.getProtocolOwner()) {
-            revert Errors.NotProtocolOwner();
+    function validateOwnerAddress(address _onwner) internal pure {
+        if (_onwner == address(0)) {
+            revert Errors.InvalidParameter();
         }
     }
 
@@ -195,17 +195,38 @@ library ValidationLib {
         }
     }
 
-    function validateFinishAuction(
-        address caller,
-        address lastBidder,
-        address creator,
-        uint256 endTime,
-        bool claimed
+    function validateClaimNft(
+        address _requester,
+        address _lastBidder,
+        address _creator,
+        uint256 _endTime,
+        bool _claim
     ) internal view {
-        if (caller != creator || caller != lastBidder) {
+        // Nếu không có ai bid thì creator có thể claim nft về
+        if (_lastBidder == address(0)) {
+            if (_requester != _creator) {
+                revert Errors.InvalidParameter();
+            }
+        } else {
+            if (_requester != _lastBidder) {
+                revert Errors.InvalidParameter();
+            }
+        }
+
+        if (_endTime >= block.timestamp) {
             revert Errors.InvalidParameter();
         }
 
+        if (_claim) {
+            revert Errors.InvalidParameter();
+        }
+    }
+
+    function validateFinishAuction(
+        address lastBidder,
+        uint256 endTime,
+        bool claimed
+    ) internal view {
         if (lastBidder == address(0)) {
             revert Errors.InvalidParameter();
         }

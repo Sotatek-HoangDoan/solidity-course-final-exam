@@ -1,34 +1,39 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity 0.8.24;
 
+import {Types} from "contracts/libraries/constants/Types.sol";
+
 interface ISotaMarketplaceHub {
-    function initialize() external;
+    // ============= FIXED PRICE ===============
+    function listERC721Nft(Types.ListERC721Params calldata params) external;
 
-    function listNft(
-        address _nft,
-        uint256 _tokenId,
-        uint256 _amount,
-        address _paymentToken,
-        uint256 _price
+    function listERC1155Nft(Types.ListERC1155Params calldata params) external;
+
+    function buyNft(uint256 _listNftId) external payable;
+
+    function cancelListNft(uint256 _listNftId) external;
+
+    // ============= AUCTION NFT ===============
+    function initERC721Auction(
+        Types.AuctionERC721Params calldata params
     ) external;
 
-    function createAuction(
-        address _nft,
-        uint256 _tokenId,
-        address _paymentToken,
-        uint256 _basePrice,
-        uint256 _minBid,
-        uint256 _endTime
+    function initERC1155Auction(
+        Types.AuctionERC1155Params calldata params
     ) external;
 
-    function buyNft(address _nft, uint256 _tokenId) external;
+    function cancelAuction(uint256 _auctionId) external;
 
-    function placeBid(
-        address _nft,
-        uint256 _tokenId,
-        uint256 _bitAmount
-    ) external;
+    function bidNft(uint256 _auctionId, uint256 _amount) external;
 
-    function withdrawToken(address _nft, uint256 _tokenId) external;
+    function claimToken(uint256 _auctionId) external;
+
+    function claimNft(uint256 _auctionId) external;
+
+    // ============== GOVERNANCE ===============
+    function setTreasuryBuyFee(uint16 newTreasuryFee) external;
+
+    function setTreasurySellFee(uint16 newTreasuryFee) external;
+
+    function setTreasury(address treasury) external;
 }

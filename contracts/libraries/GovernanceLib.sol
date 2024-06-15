@@ -24,7 +24,7 @@ library GovernanceLib {
     }
 
     function setTreasuryBuyFee(uint16 newTreasuryFee) internal {
-        if (newTreasuryFee > BPS_MAX / 2) {
+        if (newTreasuryFee > BPS_MAX) {
             revert Errors.InitParamsInvalid();
         }
 
@@ -42,7 +42,7 @@ library GovernanceLib {
     }
 
     function setTreasurySellFee(uint16 newTreasuryFee) internal {
-        if (newTreasuryFee > BPS_MAX / 2) {
+        if (newTreasuryFee > BPS_MAX) {
             revert Errors.InitParamsInvalid();
         }
 
@@ -59,16 +59,16 @@ library GovernanceLib {
         );
     }
 
-    function setBlacklistUser(address account) internal {
+    function setBlacklistUser(address account, bool status) internal {
         if (account == address(0)) {
             revert Errors.InvalidParameter();
         }
-        StorageLib.setBlacklistUser(account);
-        emit Events.BlacklistedAccount(account, block.timestamp);
+        StorageLib.setBlacklistUser(account, status);
+        emit Events.BlacklistedAccount(account, status, block.timestamp);
     }
 
     function getFeeInfo(
-        uint256 amount
+        uint256 price
     )
         internal
         view
@@ -76,8 +76,8 @@ library GovernanceLib {
     {
         Types.TreasuryData storage treasuryData = StorageLib.getTreasuryData();
 
-        buyFee = (amount * treasuryData.treasuryBuyFeeBPS) / BPS_MAX;
-        sellFee = (amount * treasuryData.treasurySellFeeBPS) / BPS_MAX;
+        buyFee = (price * treasuryData.treasuryBuyFeeBPS) / BPS_MAX;
+        sellFee = (price * treasuryData.treasurySellFeeBPS) / BPS_MAX;
         treasury = treasuryData.treasury;
     }
 }

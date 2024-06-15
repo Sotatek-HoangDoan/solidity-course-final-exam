@@ -9,16 +9,30 @@ import {ValidationLib} from "contracts/libraries/ValidationLib.sol";
 import {FixedPriceNftLib} from "contracts/libraries/FixedPriceNftLib.sol";
 import {AuctionNftLib} from "contracts/libraries/AuctionNftLib.sol";
 import {GovernanceLib} from "contracts/libraries/GovernanceLib.sol";
+import {ISotaMarketplaceHub} from "contracts/interfaces/ISotaMarketplaceHub.sol";
 
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
+import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 
-contract SotaMarketplaceHub is SotaMarketplaceStorage, Initializable {
-    constructor(address _owner) {
-        if (_owner == address(0)) {
-            revert Errors.InvalidOwner();
-        }
+contract SotaMarketplaceHub is
+    ISotaMarketplaceHub,
+    SotaMarketplaceStorage,
+    OwnableUpgradeable,
+    UUPSUpgradeable,
+    ERC721Holder,
+    ERC1155Holder
+{
+    constructor() {}
 
-        StorageLib.setProtocolOwner(_owner);
+    function initialize(
+        address _owner,
+        address _treasury
+    ) external initializer {
+        ValidationLib.validateOwnerAddress(_owner);
+        __Ownable_init(_owner);
+        GovernanceLib.setTreasury(_treasury);
     }
 
     // ============================ EXTERNAL =====================================
@@ -26,13 +40,13 @@ contract SotaMarketplaceHub is SotaMarketplaceStorage, Initializable {
     function listERC721Nft(
         Types.ListERC721Params calldata params
     ) external isBlacklisted {
-        FixedPriceNftLib.processListNft(msg.sender, params);
+        FixedPriceNftLib.processListERC721(msg.sender, params);
     }
 
     function listERC1155Nft(
         Types.ListERC1155Params calldata params
     ) external isBlacklisted {
-        FixedPriceNftLib.processListNft(msg.sender, params);
+        FixedPriceNftLib.processListERC1155(msg.sender, params);
     }
 
     function buyNft(uint256 _listNftId) external payable isBlacklisted {
@@ -47,13 +61,13 @@ contract SotaMarketplaceHub is SotaMarketplaceStorage, Initializable {
     function initERC721Auction(
         Types.AuctionERC721Params calldata params
     ) external isBlacklisted {
-        AuctionNftLib.processInitAuction(msg.sender, params);
+        AuctionNftLib.processInitERC721Auction(msg.sender, params);
     }
 
     function initERC1155Auction(
         Types.AuctionERC1155Params calldata params
     ) external isBlacklisted {
-        AuctionNftLib.processInitAuction(msg.sender, params);
+        AuctionNftLib.processInitERC1155Auction(msg.sender, params);
     }
 
     function cancelAuction(uint256 _auctionId) external {
@@ -67,37 +81,53 @@ contract SotaMarketplaceHub is SotaMarketplaceStorage, Initializable {
         AuctionNftLib.processBidNft(msg.sender, _auctionId, _amount);
     }
 
-    function finishAuction(uint256 _auctionId) external {
-        AuctionNftLib.processFinishAuction(msg.sender, _auctionId);
+    function claimToken(uint256 _auctionId) external {
+        AuctionNftLib.processClaimToken(msg.sender, _auctionId);
     }
 
-    function withdrawToken(uint256 _auctionId) external {
-        AuctionNftLib.processWithdrawAmount(msg.sender, _auctionId);
+    function claimNft(uint256 _auctionId) external {
+        AuctionNftLib.processClaimNft(msg.sender, _auctionId);
     }
 
     // ============== GOVERNANCE ===============
-    function setTreasuryBuyFee(
-        uint16 newTreasuryFee
-    ) external onlyProtocolOwner {
+    function treasury() external view returns (address) {
+        return StorageLib.getTreasuryData().treasury;
+    }
+
+    function buyFee() external view returns (uint16) {
+        return StorageLib.getTreasuryData().treasuryBuyFeeBPS;
+    }
+
+    function sellFee() external view returns (uint16) {
+        return StorageLib.getTreasuryData().treasurySellFeeBPS;
+    }
+
+    function setTreasuryBuyFee(uint16 newTreasuryFee) external onlyOwner {
         GovernanceLib.setTreasuryBuyFee(newTreasuryFee);
     }
 
-    function setTreasurySellFee(
-        uint16 newTreasuryFee
-    ) external onlyProtocolOwner {
+    function setTreasurySellFee(uint16 newTreasuryFee) external onlyOwner {
         GovernanceLib.setTreasurySellFee(newTreasuryFee);
     }
 
-    function setTreasury(address treasury) external onlyProtocolOwner {
-        GovernanceLib.setTreasury(treasury);
+    function setTreasury(address _treasury) external onlyOwner {
+        GovernanceLib.setTreasury(_treasury);
     }
 
-    //  =========================== MODIFIER ======================================
-    modifier onlyProtocolOwner() {
-        ValidationLib.validateCallerIsProtocolOwner();
-        _;
+    function blockUser(address _user) external onlyOwner {
+        GovernanceLib.setBlacklistUser(_user, true);
     }
 
+    function unblockUser(address _user) external onlyOwner {
+        GovernanceLib.setBlacklistUser(_user, false);
+    }
+
+    // =========================== INTERNAL ======================================
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal override onlyOwner {}
+
+    // =========================== MODIFIER ======================================
     modifier isBlacklisted() {
         ValidationLib.validateBlacklistUser();
         _;

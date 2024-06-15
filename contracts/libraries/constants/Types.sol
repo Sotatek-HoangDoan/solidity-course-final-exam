@@ -24,7 +24,7 @@ library Types {
         uint256 id;
         address nft;
         uint256 tokenId;
-        uint256 amount;
+        uint256 amount; // amount use for ERC1155
         address creator;
         address payToken; // address(0) means ETH
         uint256 initialPrice;

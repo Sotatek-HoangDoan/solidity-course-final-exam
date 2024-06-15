@@ -16,7 +16,7 @@ import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 library FixedPriceNftLib {
     using SafeERC20 for IERC20;
 
-    function processListNft(
+    function processListERC721(
         address _creator,
         Types.ListERC721Params calldata _listNftParams
     ) internal {
@@ -35,6 +35,12 @@ library FixedPriceNftLib {
             Types.NftType.ERC721
         );
 
+        _forwardERC721FromSeller(
+            _creator,
+            _listNftParams.nft,
+            _listNftParams.tokenId
+        );
+
         emit Events.ListNftForSale(
             _listNftParams,
             currentListNftId,
@@ -43,7 +49,7 @@ library FixedPriceNftLib {
         );
     }
 
-    function processListNft(
+    function processListERC1155(
         address _creator,
         Types.ListERC1155Params calldata _listNftParams
     ) internal {
@@ -63,6 +69,13 @@ library FixedPriceNftLib {
             Types.NftType.ERC1155
         );
 
+        _forwardERC1155FromSeller(
+            _creator,
+            _listNftParams.nft,
+            _listNftParams.tokenId,
+            _listNftParams.amount
+        );
+
         emit Events.ListNftForSale(
             _listNftParams,
             currentListNftId,
@@ -76,11 +89,11 @@ library FixedPriceNftLib {
         Types.ListNFT storage request = StorageLib.getListNFT(_listNftId);
         ValidationLib.validateBuyListNft(_buyer, request.seller, request.sold);
         (uint256 buyFee, uint256 sellFee, address treasury) = GovernanceLib
-            .getFeeInfo(request.amount);
+            .getFeeInfo(request.price);
         request.sold = true;
 
         if (request.payToken == address(0)) {
-            if (msg.value != request.amount + buyFee) {
+            if (msg.value != request.price + buyFee) {
                 revert Errors.InsufficientBalance();
             }
             _forwardETHFromBuyer(request.seller, request.price - sellFee);
@@ -101,16 +114,10 @@ library FixedPriceNftLib {
         }
 
         if (request.nftType == Types.NftType.ERC721) {
-            _forwardERC721ToBuyer(
-                _buyer,
-                request.seller,
-                request.nft,
-                request.tokenId
-            );
+            _forwardERC721ToBuyer(_buyer, request.nft, request.tokenId);
         } else {
             _forwardERC1155ToBuyer(
                 _buyer,
-                request.seller,
                 request.nft,
                 request.tokenId,
                 request.amount
@@ -129,6 +136,17 @@ library FixedPriceNftLib {
         );
 
         request.sold = true;
+
+        if (request.nftType == Types.NftType.ERC721) {
+            _forwardERC721ToBuyer(_seller, request.nft, request.tokenId);
+        } else {
+            _forwardERC1155ToBuyer(
+                _seller,
+                request.nft,
+                request.tokenId,
+                request.amount
+            );
+        }
 
         emit Events.ListNftCancelled(_requestId, block.timestamp);
     }
@@ -173,22 +191,49 @@ library FixedPriceNftLib {
         IERC20(_token).safeTransferFrom(_buyer, _seller, _amount);
     }
 
-    function _forwardERC721ToBuyer(
-        address _buyer,
+    function _forwardERC721FromSeller(
         address _seller,
         address _nft,
         uint256 _tokenId
     ) private {
-        IERC721(_nft).safeTransferFrom(_seller, _buyer, _tokenId);
+        IERC721(_nft).safeTransferFrom(_seller, address(this), _tokenId);
     }
 
-    function _forwardERC1155ToBuyer(
-        address _buyer,
+    function _forwardERC1155FromSeller(
         address _seller,
         address _nft,
         uint256 _tokenId,
         uint256 _amount
     ) private {
-        IERC1155(_nft).safeTransferFrom(_seller, _buyer, _tokenId, _amount, "");
+        IERC1155(_nft).safeTransferFrom(
+            _seller,
+            address(this),
+            _tokenId,
+            _amount,
+            ""
+        );
+    }
+
+    function _forwardERC721ToBuyer(
+        address _buyer,
+        address _nft,
+        uint256 _tokenId
+    ) private {
+        IERC721(_nft).safeTransferFrom(address(this), _buyer, _tokenId);
+    }
+
+    function _forwardERC1155ToBuyer(
+        address _buyer,
+        address _nft,
+        uint256 _tokenId,
+        uint256 _amount
+    ) private {
+        IERC1155(_nft).safeTransferFrom(
+            address(this),
+            _buyer,
+            _tokenId,
+            _amount,
+            ""
+        );
     }
 }

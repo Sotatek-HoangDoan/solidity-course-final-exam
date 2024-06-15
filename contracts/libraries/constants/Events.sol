@@ -25,7 +25,7 @@ library Events {
         uint256 timestamp
     );
 
-    event BlacklistedAccount(address account, uint256 timestamp);
+    event BlacklistedAccount(address account, bool status, uint256 timestamp);
 
     // ============== FIXED PRICE ==============
     event ListNftForSale(
@@ -70,10 +70,18 @@ library Events {
         uint256 timestamp
     );
 
-    event AmountWithdrawn(
+    event AmountClaimed(
         uint256 indexed requestId,
         address bidder,
         uint256 amount,
+        uint256 timestamp
+    );
+
+    event NftClaimed(
+        uint256 indexed requestId,
+        address bidder,
+        address nft,
+        uint256 tokenId,
         uint256 timestamp
     );
 

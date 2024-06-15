@@ -7,12 +7,11 @@ library StorageLib {
     // Storage slots constants
     uint256 constant TOTAL_LIST_NFTS_SLOT = 0;
     uint256 constant TOTAL_AUCTION_NFTS_SLOT = 1;
-    uint256 constant OWNER_SLOT = 2;
-    uint256 constant TREASURY_DATA_SLOT = 3;
-    uint256 constant LIST_NFTS_MAPPING_SLOT = 4;
-    uint256 constant AUCTION_NFTS_MAPPING_SLOT = 5;
-    uint256 constant BID_PLACES_MAPPING_SLOT = 6;
-    uint256 constant BLACKLIST_MAPPING_SLOT = 7;
+    uint256 constant TREASURY_DATA_SLOT = 2;
+    uint256 constant LIST_NFTS_MAPPING_SLOT = 3;
+    uint256 constant AUCTION_NFTS_MAPPING_SLOT = 4;
+    uint256 constant BID_PLACES_MAPPING_SLOT = 5;
+    uint256 constant BLACKLIST_MAPPING_SLOT = 6;
 
     function getTotalListNfts() internal view returns (uint256 _totalListNfts) {
         assembly {
@@ -86,18 +85,6 @@ library StorageLib {
         }
     }
 
-    function getProtocolOwner() internal view returns (address _owner) {
-        assembly {
-            _owner := sload(OWNER_SLOT)
-        }
-    }
-
-    function setProtocolOwner(address _owner) internal {
-        assembly {
-            sstore(OWNER_SLOT, _owner)
-        }
-    }
-
     function getBlacklistUser(address account) internal view returns (bool) {
         bool result;
         assembly {
@@ -108,11 +95,11 @@ library StorageLib {
         return result;
     }
 
-    function setBlacklistUser(address account) internal {
+    function setBlacklistUser(address account, bool status) internal {
         assembly {
             mstore(0, account)
             mstore(32, BLACKLIST_MAPPING_SLOT)
-            sstore(keccak256(0, 64), true)
+            sstore(keccak256(0, 64), status)
         }
     }
 }

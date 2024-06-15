@@ -15,7 +15,7 @@ import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 library AuctionNftLib {
     using SafeERC20 for IERC20;
 
-    function processInitAuction(
+    function processInitERC721Auction(
         address _creator,
         Types.AuctionERC721Params calldata _initAuctionParams
     ) internal {
@@ -37,6 +37,12 @@ library AuctionNftLib {
             _initAuctionParams.endTime
         );
 
+        _forwardERC721FromCreator(
+            _creator,
+            _initAuctionParams.nft,
+            _initAuctionParams.tokenId
+        );
+
         emit Events.AuctionNftCreated(
             _initAuctionParams,
             currentAuctionId,
@@ -45,7 +51,7 @@ library AuctionNftLib {
         );
     }
 
-    function processInitAuction(
+    function processInitERC1155Auction(
         address _creator,
         Types.AuctionERC1155Params calldata _initAuctionParams
     ) internal {
@@ -68,6 +74,13 @@ library AuctionNftLib {
             _initAuctionParams.endTime
         );
 
+        _forwardERC1155FromCreator(
+            _creator,
+            _initAuctionParams.nft,
+            _initAuctionParams.tokenId,
+            _initAuctionParams.amount
+        );
+
         emit Events.AuctionNftCreated(
             _initAuctionParams,
             currentAuctionId,
@@ -76,7 +89,10 @@ library AuctionNftLib {
         );
     }
 
-    function processCancelAuction(address _creator, uint256 _auctionId) internal {
+    function processCancelAuction(
+        address _creator,
+        uint256 _auctionId
+    ) internal {
         Types.AuctionNFT storage request = StorageLib.getAuctionNFT(_auctionId);
         ValidationLib.validateCancelAuctionNft(
             _creator,
@@ -86,6 +102,17 @@ library AuctionNftLib {
         );
 
         request.claimed = true;
+
+        if (request.nftType == Types.NftType.ERC721) {
+            _forwardERC721ToBidder(_creator, request.nft, request.tokenId);
+        } else {
+            _forwardERC1155ToBidder(
+                _creator,
+                request.nft,
+                request.tokenId,
+                request.amount
+            );
+        }
 
         emit Events.AuctionNftCancelled(_auctionId, block.timestamp);
     }
@@ -128,15 +155,14 @@ library AuctionNftLib {
         emit Events.BidNft(_auctionId, _bidder, _amount, block.timestamp);
     }
 
-    function processWithdrawAmount(
-        address _bidder,
-        uint256 _auctionId
-    ) internal {
+    function processClaimToken(address _bidder, uint256 _auctionId) internal {
         Types.AuctionNFT storage request = StorageLib.getAuctionNFT(_auctionId);
+
         Types.BidPlace storage bidPlace = StorageLib.getBidPlace(
             _auctionId,
-            _bidder
+            _bidder == request.creator ? request.lastBidder : _bidder // Nếu người claim là creator của auction thì sẽ claim token của last bidder
         );
+
         ValidationLib.validateClaimToken(
             _bidder,
             request.lastBidder,
@@ -153,7 +179,7 @@ library AuctionNftLib {
             _forwardERC20ToUser(_bidder, request.payToken, bidPlace.amount);
         }
 
-        emit Events.AmountWithdrawn(
+        emit Events.AmountClaimed(
             _auctionId,
             _bidder,
             bidPlace.amount,
@@ -161,53 +187,36 @@ library AuctionNftLib {
         );
     }
 
-    function processFinishAuction(
-        address _creator,
-        uint256 _auctionId
-    ) internal {
+    function processClaimNft(address _bidder, uint256 _auctionId) internal {
         Types.AuctionNFT storage request = StorageLib.getAuctionNFT(_auctionId);
-        ValidationLib.validateFinishAuction(
-            _creator,
+        ValidationLib.validateClaimNft(
+            _bidder,
             request.lastBidder,
             request.creator,
             request.endTime,
             request.claimed
         );
 
-        Types.BidPlace storage bidPlace = StorageLib.getBidPlace(
-            _auctionId,
-            request.lastBidder
-        );
         request.claimed = true;
-        bidPlace.claimed = true;
-        if (request.payToken == address(0)) {
-            _forwardETHtoUser(request.creator, bidPlace.amount);
-        } else {
-            _forwardERC20ToUser(
-                request.creator,
-                request.payToken,
-                bidPlace.amount
-            );
-        }
 
-        if (request.nftType == Types.NftType.ERC1155) {
+        if (request.nftType == Types.NftType.ERC721) {
+            _forwardERC721ToBidder(_bidder, request.nft, request.tokenId);
+        } else {
             _forwardERC1155ToBidder(
-                request.lastBidder,
-                request.creator,
+                _bidder,
                 request.nft,
                 request.tokenId,
                 request.amount
             );
-        } else {
-            _forwardERC721ToBidder(
-                request.lastBidder,
-                request.creator,
-                request.nft,
-                request.tokenId
-            );
         }
 
-        emit Events.AuctionNftFinished(_auctionId, block.timestamp);
+        emit Events.NftClaimed(
+            _auctionId,
+            _bidder,
+            request.nft,
+            request.tokenId,
+            block.timestamp
+        );
     }
 
     function _initAuctionNft(
@@ -265,17 +274,15 @@ library AuctionNftLib {
         IERC20(_token).safeTransfer(_bidder, _amount);
     }
 
-    function _forwardERC721ToBidder(
-        address _bidder,
+    function _forwardERC721FromCreator(
         address _seller,
         address _nft,
         uint256 _tokenId
     ) private {
-        IERC721(_nft).safeTransferFrom(_seller, _bidder, _tokenId);
+        IERC721(_nft).safeTransferFrom(_seller, address(this), _tokenId);
     }
 
-    function _forwardERC1155ToBidder(
-        address _bidder,
+    function _forwardERC1155FromCreator(
         address _seller,
         address _nft,
         uint256 _tokenId,
@@ -283,6 +290,29 @@ library AuctionNftLib {
     ) private {
         IERC1155(_nft).safeTransferFrom(
             _seller,
+            address(this),
+            _tokenId,
+            _amount,
+            ""
+        );
+    }
+
+    function _forwardERC721ToBidder(
+        address _bidder,
+        address _nft,
+        uint256 _tokenId
+    ) private {
+        IERC721(_nft).safeTransferFrom(address(this), _bidder, _tokenId);
+    }
+
+    function _forwardERC1155ToBidder(
+        address _bidder,
+        address _nft,
+        uint256 _tokenId,
+        uint256 _amount
+    ) private {
+        IERC1155(_nft).safeTransferFrom(
+            address(this),
             _bidder,
             _tokenId,
             _amount,

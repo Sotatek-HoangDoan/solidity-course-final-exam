@@ -1,12 +1,15 @@
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
+import { MyToken } from "../typechain-types/contracts/mocks/ERC20Mock.sol/MyToken";
+import { MyERC721Nft } from "../typechain-types/contracts/mocks/ERC721Mock.sol/MyERC721Nft";
+import { MyERC1155Nft } from "../typechain-types/contracts/mocks/ERC1155Mock.sol/MyERC1155Nft";
 
 describe("SotaMarketplaceHub", () => {
   let sotaMarketplaceHub: any;
-  let myToken: any;
-  let myERC721Nft: any;
-  let myERC1155Nft: any;
+  let myToken: MyToken;
+  let myERC721Nft: MyERC721Nft;
+  let myERC1155Nft: MyERC1155Nft;
   let owner: HardhatEthersSigner;
   let treasury: HardhatEthersSigner;
   let addr1: HardhatEthersSigner;
@@ -15,13 +18,13 @@ describe("SotaMarketplaceHub", () => {
   const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
   beforeEach(async () => {
-    const SotaMarketplaceHub = await ethers.getContractFactory(
+    const SotaMarketplaceHubFactory = await ethers.getContractFactory(
       "SotaMarketplaceHub"
     );
     [owner, treasury, addr1, addr2] = await ethers.getSigners();
 
     sotaMarketplaceHub = await upgrades.deployProxy(
-      SotaMarketplaceHub,
+      SotaMarketplaceHubFactory,
       [owner.address, treasury.address],
       { initializer: "initialize", kind: "uups" }
     );
@@ -60,7 +63,7 @@ describe("SotaMarketplaceHub", () => {
   });
 
   describe("Fixed Price Listing", function () {
-    it("Should list and buy an ERC721 NFT", async function () {
+    it("Should list and buy an ERC721 NFT by native token", async function () {
       await sotaMarketplaceHub.connect(owner).setTreasuryBuyFee(500); // 5%
       await sotaMarketplaceHub.connect(owner).setTreasurySellFee(500); // 5%
       await myERC721Nft.connect(owner).mint(addr1.address, 1);
@@ -75,6 +78,19 @@ describe("SotaMarketplaceHub", () => {
       await sotaMarketplaceHub.connect(addr1).listERC721Nft(listERC721Params);
       expect(await sotaMarketplaceHub.totalListNfts()).to.equal(1);
       expect(await myERC721Nft.ownerOf(1)).to.equal(sotaMarketplaceHub.target);
+      await expect(
+        sotaMarketplaceHub
+          .connect(addr2)
+          .buyNft(0, { value: ethers.parseEther("1") })
+      ).to.be.revertedWithCustomError(
+        sotaMarketplaceHub,
+        "InsufficientBalance"
+      );
+      await expect(
+        sotaMarketplaceHub
+          .connect(addr1)
+          .buyNft(0, { value: ethers.parseEther("1.05") })
+      ).to.be.revertedWithCustomError(sotaMarketplaceHub, "InvalidParameter");
       const addr1Balance = await ethers.provider.getBalance(addr1.address);
       const treasuryBalance = await ethers.provider.getBalance(
         treasury.address
@@ -86,6 +102,45 @@ describe("SotaMarketplaceHub", () => {
       const newTreasuryBalance = await ethers.provider.getBalance(
         treasury.address
       );
+      expect(addr1Balance + ethers.parseEther("0.95")).to.equal(
+        newAddr1Balance
+      );
+      expect(treasuryBalance + ethers.parseEther("0.1")).to.equal(
+        newTreasuryBalance
+      );
+      expect(await myERC721Nft.ownerOf(1)).to.equal(addr2.address);
+      await expect(
+        sotaMarketplaceHub
+          .connect(addr2)
+          .buyNft(0, { value: ethers.parseEther("1.05") })
+      ).to.be.revertedWithCustomError(sotaMarketplaceHub, "InvalidParameter");
+      await expect(
+        sotaMarketplaceHub.connect(addr1).cancelListNft(0)
+      ).to.be.revertedWithCustomError(sotaMarketplaceHub, "InvalidParameter");
+    });
+
+    it("Should list and buy an ERC721 NFT by ERC20 token", async function () {
+      await sotaMarketplaceHub.connect(owner).setTreasuryBuyFee(500); // 5%
+      await sotaMarketplaceHub.connect(owner).setTreasurySellFee(500); // 5%
+      await myERC721Nft.connect(owner).mint(addr1.address, 1);
+      await myERC721Nft.connect(addr1).approve(sotaMarketplaceHub.target, 1);
+      const listERC721Params = {
+        nft: myERC721Nft.target,
+        tokenId: 1,
+        price: ethers.parseEther("1"),
+        payToken: myToken.target,
+      };
+
+      await sotaMarketplaceHub.connect(addr1).listERC721Nft(listERC721Params);
+      await myToken.connect(owner).mint(addr2.address, ethers.parseEther("2"));
+      await myToken
+        .connect(addr2)
+        .approve(sotaMarketplaceHub.target, ethers.parseEther("2"));
+      const addr1Balance = await myToken.balanceOf(addr1.address);
+      const treasuryBalance = await myToken.balanceOf(treasury.address);
+      await sotaMarketplaceHub.connect(addr2).buyNft(0); // 1 + 5% * 1 (fee)
+      const newAddr1Balance = await myToken.balanceOf(addr1.address);
+      const newTreasuryBalance = await myToken.balanceOf(treasury.address);
       expect(addr1Balance + ethers.parseEther("0.95")).to.equal(
         newAddr1Balance
       );
@@ -110,6 +165,7 @@ describe("SotaMarketplaceHub", () => {
       };
 
       await sotaMarketplaceHub.connect(addr1).listERC1155Nft(listERC1155Params);
+      expect(await sotaMarketplaceHub.totalListNfts()).to.equal(1);
 
       await sotaMarketplaceHub
         .connect(addr2)
@@ -130,6 +186,10 @@ describe("SotaMarketplaceHub", () => {
       };
 
       await sotaMarketplaceHub.connect(addr1).listERC721Nft(listERC721Params);
+
+      await expect(
+        sotaMarketplaceHub.connect(addr2).cancelListNft(0)
+      ).to.be.revertedWithCustomError(sotaMarketplaceHub, "InvalidParameter");
 
       await sotaMarketplaceHub.connect(addr1).cancelListNft(0);
 
@@ -158,28 +218,231 @@ describe("SotaMarketplaceHub", () => {
   });
 
   describe("Auction NFT Operations", () => {
-    it("Should initialize ERC721 Auction", async () => {
-      // Implement the logic to test initERC721Auction
+    it("Should ERC721 auction with native token", async function () {
+      await myERC721Nft.connect(owner).mint(addr1.address, 1);
+      await myERC721Nft.connect(addr1).approve(sotaMarketplaceHub.target, 1);
+      const now = await ethers.provider
+        .getBlock("latest")
+        .then((res) => res?.timestamp ?? Math.floor(Date.now() / 1000));
+
+      const auctionParams = {
+        nft: myERC721Nft.target,
+        tokenId: 1,
+        initialPrice: ethers.parseEther("1"),
+        minBid: ethers.parseEther("0.1"),
+        endTime: now + 3600,
+        payToken: ZERO_ADDRESS,
+      };
+
+      // await expect(
+      await sotaMarketplaceHub.connect(addr1).initERC721Auction(auctionParams);
+      // ).to.emit(sotaMarketplaceHub, "AuctionNftCreated");
+      expect(await myERC721Nft.ownerOf(1)).to.equal(sotaMarketplaceHub.target);
+      expect(await sotaMarketplaceHub.totalAuctionNfts()).to.equal(1);
+      await expect(
+        sotaMarketplaceHub
+          .connect(addr1)
+          .bidNft(0, ethers.parseEther("1"), { value: ethers.parseEther("1") })
+      ).to.be.revertedWithCustomError(sotaMarketplaceHub, "InvalidParameter");
+      await expect(
+        sotaMarketplaceHub.connect(addr2).bidNft(0, ethers.parseEther("1"), {
+          value: ethers.parseEther("0.5"),
+        })
+      ).to.be.revertedWithCustomError(
+        sotaMarketplaceHub,
+        "InsufficientBalance"
+      );
+      expect(
+        await sotaMarketplaceHub
+          .connect(owner)
+          .bidNft(0, ethers.parseEther("1"), { value: ethers.parseEther("1") })
+      ).to.emit(sotaMarketplaceHub, "BidNft");
+      expect((await sotaMarketplaceHub.auctionNfts(0))[9]).to.equals(
+        owner.address
+      );
+      await expect(
+        sotaMarketplaceHub
+          .connect(addr2)
+          .bidNft(0, ethers.parseEther("1"), { value: ethers.parseEther("1") })
+      ).to.be.revertedWithCustomError(sotaMarketplaceHub, "InvalidParameter");
+
+      await expect(
+        sotaMarketplaceHub.connect(addr2).bidNft(0, ethers.parseEther("1.05"), {
+          value: ethers.parseEther("1.05"),
+        })
+      ).to.be.revertedWithCustomError(sotaMarketplaceHub, "InvalidParameter");
+
+      await sotaMarketplaceHub
+        .connect(addr2)
+        .bidNft(0, ethers.parseEther("1.1"), {
+          value: ethers.parseEther("1.1"),
+        });
+
+      expect(
+        (await sotaMarketplaceHub.bidPlaces(0, addr2.address))[0]
+      ).to.equal(ethers.parseEther("1.1"));
+      await expect(
+        sotaMarketplaceHub.connect(addr1).cancelAuction(0)
+      ).to.be.revertedWithCustomError(sotaMarketplaceHub, "InvalidParameter");
+      await ethers.provider.send("evm_increaseTime", [3600]);
+      await ethers.provider.send("evm_mine");
+      await expect(
+        sotaMarketplaceHub.connect(addr2).bidNft(0, ethers.parseEther("1.5"), {
+          value: ethers.parseEther("0.4"),
+        })
+      ).to.be.revertedWithCustomError(sotaMarketplaceHub, "InvalidParameter");
+      await expect(
+        sotaMarketplaceHub.connect(addr1).claimNft(0)
+      ).to.be.revertedWithCustomError(sotaMarketplaceHub, "InvalidParameter");
+      await expect(sotaMarketplaceHub.connect(addr2).claimNft(0)).to.be.emit(
+        sotaMarketplaceHub,
+        "NftClaimed"
+      );
+      expect(await myERC721Nft.ownerOf(1)).to.equal(addr2.address);
+      await expect(
+        sotaMarketplaceHub.connect(addr2).claimToken(0)
+      ).to.be.revertedWithCustomError(sotaMarketplaceHub, "InvalidParameter");
+      await expect(sotaMarketplaceHub.connect(addr1).claimToken(0)).to.be.emit(
+        sotaMarketplaceHub,
+        "AmountClaimed"
+      );
+      await expect(sotaMarketplaceHub.connect(owner).claimToken(0)).to.be.emit(
+        sotaMarketplaceHub,
+        "AmountClaimed"
+      );
+      await expect(
+        sotaMarketplaceHub.connect(owner).claimToken(0)
+      ).to.be.revertedWithCustomError(sotaMarketplaceHub, "InvalidParameter");
     });
 
-    it("Should initialize ERC1155 Auction", async () => {
-      // Implement the logic to test initERC1155Auction
+    it("Should ERC721 auction with ERC20", async function () {
+      await myToken.connect(owner).mint(addr2, ethers.parseEther("10"));
+      await myToken.connect(owner).mint(owner, ethers.parseEther("10"));
+      await myToken
+        .connect(addr2)
+        .approve(sotaMarketplaceHub.target, ethers.parseEther("10"));
+      await myToken
+        .connect(owner)
+        .approve(sotaMarketplaceHub.target, ethers.parseEther("10"));
+      await myERC721Nft.connect(owner).mint(addr1.address, 1);
+      await myERC721Nft.connect(addr1).approve(sotaMarketplaceHub.target, 1);
+      const now = await ethers.provider
+        .getBlock("latest")
+        .then((res) => res?.timestamp ?? Math.floor(Date.now() / 1000));
+
+      const auctionParams = {
+        nft: myERC721Nft.target,
+        tokenId: 1,
+        initialPrice: ethers.parseEther("1"),
+        minBid: ethers.parseEther("0.1"),
+        endTime: now + 3600,
+        payToken: myToken.target,
+      };
+
+      // await expect(
+      await sotaMarketplaceHub.connect(addr1).initERC721Auction(auctionParams);
+      // ).to.emit(sotaMarketplaceHub, "AuctionNftCreated");
+      expect(await myERC721Nft.ownerOf(1)).to.equal(sotaMarketplaceHub.target);
+      expect(await sotaMarketplaceHub.totalAuctionNfts()).to.equal(1);
+      await expect(
+        sotaMarketplaceHub
+          .connect(owner)
+          .bidNft(0, ethers.parseEther("1"), { value: ethers.parseEther("1") })
+      ).to.be.revertedWithCustomError(sotaMarketplaceHub, "InvalidParameter");
+      expect(
+        await sotaMarketplaceHub
+          .connect(owner)
+          .bidNft(0, ethers.parseEther("1"))
+      ).to.emit(sotaMarketplaceHub, "BidNft");
+
+      await sotaMarketplaceHub
+        .connect(addr2)
+        .bidNft(0, ethers.parseEther("1.1"));
+
+      await ethers.provider.send("evm_increaseTime", [3600]);
+      await ethers.provider.send("evm_mine");
+      await expect(sotaMarketplaceHub.connect(addr2).claimNft(0)).to.be.emit(
+        sotaMarketplaceHub,
+        "NftClaimed"
+      );
+      await expect(sotaMarketplaceHub.connect(addr1).claimToken(0)).to.be.emit(
+        sotaMarketplaceHub,
+        "AmountClaimed"
+      );
+      await expect(sotaMarketplaceHub.connect(owner).claimToken(0)).to.be.emit(
+        sotaMarketplaceHub,
+        "AmountClaimed"
+      );
     });
 
-    it("Should allow canceling an auction", async () => {
-      // Implement the logic to test cancelAuction
+    it("Should ERC1155 auction", async function () {
+      await myERC1155Nft.connect(owner).mint(addr1.address, 1, 10);
+      await myERC1155Nft
+        .connect(addr1)
+        .setApprovalForAll(sotaMarketplaceHub.target, true);
+      const now = await ethers.provider
+        .getBlock("latest")
+        .then((res) => res?.timestamp ?? Math.floor(Date.now() / 1000));
+
+      const auctionParams = {
+        nft: myERC1155Nft.target,
+        tokenId: 1,
+        amount: 10,
+        initialPrice: ethers.parseEther("1"),
+        minBid: ethers.parseEther("0.1"),
+        endTime: now + 3600,
+        payToken: ZERO_ADDRESS,
+      };
+
+      // await expect(
+      await sotaMarketplaceHub.connect(addr1).initERC1155Auction(auctionParams);
+      // ).to.emit(sotaMarketplaceHub, "AuctionNftCreated");
+      expect(
+        await myERC1155Nft.balanceOf(sotaMarketplaceHub.target, 1)
+      ).to.equal(10);
+      expect(
+        await sotaMarketplaceHub
+          .connect(owner)
+          .bidNft(0, ethers.parseEther("1"), { value: ethers.parseEther("1") })
+      ).to.emit(sotaMarketplaceHub, "BidNft");
+
+      await sotaMarketplaceHub
+        .connect(addr2)
+        .bidNft(0, ethers.parseEther("1.1"), {
+          value: ethers.parseEther("1.1"),
+        });
+      await ethers.provider.send("evm_increaseTime", [3600]);
+      await ethers.provider.send("evm_mine");
+      // await expect(sotaMarketplaceHub.connect(addr2).claimNft(0)).to.be.emit(
+      //   sotaMarketplaceHub,
+      //   "NftClaimed"
+      // );
+      // expect(await myERC1155Nft.balanceOf(addr2.address, 1)).to.equal(10);
     });
 
-    it("Should allow bidding on an auction", async () => {
-      // Implement the logic to test bidNft
-    });
+    it("Should cancel auction", async function () {
+      await myERC721Nft.connect(owner).mint(addr1.address, 1);
+      await myERC721Nft.connect(addr1).approve(sotaMarketplaceHub.target, 1);
+      const now = await ethers.provider
+        .getBlock("latest")
+        .then((res) => res?.timestamp ?? Math.floor(Date.now() / 1000));
 
-    it("Should allow claiming token after auction", async () => {
-      // Implement the logic to test claimToken
-    });
+      const auctionParams = {
+        nft: myERC721Nft.target,
+        tokenId: 1,
+        initialPrice: ethers.parseEther("1"),
+        minBid: ethers.parseEther("0.1"),
+        endTime: now + 3600,
+        payToken: ZERO_ADDRESS,
+      };
 
-    it("Should allow claiming NFT after auction", async () => {
-      // Implement the logic to test claimNft
+      // await expect(
+      await sotaMarketplaceHub.connect(addr1).initERC721Auction(auctionParams);
+      // ).to.emit(sotaMarketplaceHub, "AuctionNftCreated");
+      await expect(
+        sotaMarketplaceHub.connect(addr1).cancelAuction(0)
+      ).to.be.emit(sotaMarketplaceHub, "AuctionNftCancelled");
+      expect(await myERC721Nft.ownerOf(1)).to.equal(addr1.address);
     });
   });
 

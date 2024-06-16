@@ -24,7 +24,7 @@ interface ISotaMarketplaceHub {
 
     function cancelAuction(uint256 _auctionId) external;
 
-    function bidNft(uint256 _auctionId, uint256 _amount) external;
+    function bidNft(uint256 _auctionId, uint256 _amount) external payable;
 
     function claimToken(uint256 _auctionId) external;
 

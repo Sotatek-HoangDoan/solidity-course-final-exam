@@ -62,7 +62,6 @@ library Types {
     }
 
     struct AuctionERC721Params {
-        uint256 id;
         address nft;
         uint256 tokenId;
         address payToken;
@@ -72,7 +71,6 @@ library Types {
     }
 
     struct AuctionERC1155Params {
-        uint256 id;
         address nft;
         uint256 tokenId;
         uint256 amount;

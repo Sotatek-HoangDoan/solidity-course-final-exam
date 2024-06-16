@@ -13,10 +13,12 @@ import {ISotaMarketplaceHub} from "contracts/interfaces/ISotaMarketplaceHub.sol"
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 
 contract SotaMarketplaceHub is
+    Initializable,
     ISotaMarketplaceHub,
     SotaMarketplaceStorage,
     OwnableUpgradeable,
@@ -24,7 +26,9 @@ contract SotaMarketplaceHub is
     ERC721Holder,
     ERC1155Holder
 {
-    constructor() {}
+    // constructor() {
+    //     _disableInitializers();
+    // }
 
     function initialize(
         address _owner,
@@ -77,7 +81,7 @@ contract SotaMarketplaceHub is
     function bidNft(
         uint256 _auctionId,
         uint256 _amount
-    ) external isBlacklisted {
+    ) external payable isBlacklisted {
         AuctionNftLib.processBidNft(msg.sender, _auctionId, _amount);
     }
 

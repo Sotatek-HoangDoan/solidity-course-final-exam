@@ -137,9 +137,13 @@ library AuctionNftLib {
             minimumToBid,
             request.endTime
         );
+        Types.BidPlace storage newBidPlace = StorageLib.getBidPlace(
+            _auctionId,
+            _bidder
+        );
 
-        uint256 amountNeedToTransfer = _amount - bidPlace.amount;
-        bidPlace.amount = _amount;
+        uint256 amountNeedToTransfer = _amount - newBidPlace.amount;
+        newBidPlace.amount = _amount;
         request.lastBidder = _bidder;
 
         if (request.payToken == address(0)) {
@@ -243,6 +247,8 @@ library AuctionNftLib {
         auctionNft.initialPrice = _initialPrice;
         auctionNft.minBid = _minBid;
         auctionNft.endTime = _endTime;
+
+        StorageLib.setTotalAuctionNfts(currentAuctionId + 1);
     }
 
     function _forwardETHFromBidder(uint256 _amount) private {
